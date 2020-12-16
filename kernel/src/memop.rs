@@ -108,6 +108,25 @@ pub(crate) fn memop(process: &dyn ProcessType, op_type: usize, r1: usize) -> Ret
             ReturnCode::SUCCESS
         }
 
+        // Op Type 12: Number of storage locations.
+        12 => ReturnCode::SuccessWithValue { value: process.number_storage_locations() },
+
+        // Op Type 13: The start address of the storage location indexed by r1.
+        13 => {
+            match process.get_storage_location(r1) {
+                None => ReturnCode::FAIL,
+                Some(x) => ReturnCode::SuccessWithValue { value: x.address }
+            }
+        }
+
+        // Op Type 14: The size of the storage location indexed by r1.
+        14 => {
+            match process.get_storage_location(r1) {
+                None => ReturnCode::FAIL,
+                Some(x) => ReturnCode::SuccessWithValue { value: x.size }
+            }
+        }
+
         _ => ReturnCode::ENOSUPPORT,
     }
 }

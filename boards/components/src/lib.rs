@@ -36,3 +36,4 @@ pub mod spi;
 pub mod st7735;
 pub mod temperature;
 pub mod touch;
+pub mod usb_ctap;

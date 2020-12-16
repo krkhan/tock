@@ -111,7 +111,18 @@ pub mod io;
 // Whether to use UART debugging or Segger RTT (USB) debugging.
 // - Set to false to use UART.
 // - Set to true to use Segger RTT over USB.
-const USB_DEBUGGING: bool = false;
+const USB_DEBUGGING: bool = true;
+
+const VENDOR_ID: u16 = 0x1915; // Nordic Semiconductor
+const PRODUCT_ID: u16 = 0x521f; // nRF52840 Dongle (PCA10059)
+static STRINGS: &'static [&'static str] = &[
+    // Manufacturer
+    "Nordic Semiconductor ASA",
+    // Product
+    "OpenSK",
+    // Serial number
+    "v0.1",
+];
 
 // State for loading and holding applications.
 // How should the kernel respond when a process faults.
@@ -122,6 +133,11 @@ const NUM_PROCS: usize = 8;
 
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] =
     [None; NUM_PROCS];
+
+static mut STORAGE_LOCATIONS: [kernel::StorageLocation; 1] = [kernel::StorageLocation {
+    address: 0xC0000,
+    size: 0x40000,
+}];
 
 static mut CHIP: Option<&'static nrf52840::chip::Chip> = None;
 
@@ -158,6 +174,12 @@ pub struct Platform {
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
     >,
     nonvolatile_storage: &'static capsules::nonvolatile_storage_driver::NonvolatileStorage<'static>,
+    nvmc: &'static nrf52840::nvmc::SyscallDriver,
+    usb: &'static capsules::usb::usb_ctap::CtapUsbSyscallDriver<
+        'static,
+        'static,
+        nrf52840::usbd::Usbd<'static>,
+    >,
 }
 
 impl kernel::Platform for Platform {
@@ -177,8 +199,29 @@ impl kernel::Platform for Platform {
             capsules::temperature::DRIVER_NUM => f(Some(self.temp)),
             capsules::analog_comparator::DRIVER_NUM => f(Some(self.analog_comparator)),
             capsules::nonvolatile_storage_driver::DRIVER_NUM => f(Some(self.nonvolatile_storage)),
+            nrf52840::nvmc::DRIVER_NUM => f(Some(self.nvmc)),
+            capsules::usb::usb_ctap::DRIVER_NUM => f(Some(self.usb)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
+        }
+    }
+
+    fn filter_syscall(
+        &self,
+        process: &dyn kernel::procs::ProcessType,
+        syscall: &kernel::syscall::Syscall,
+    ) -> Result<(), kernel::ReturnCode> {
+        use kernel::syscall::Syscall;
+        match *syscall {
+            Syscall::COMMAND {
+                driver_number: nrf52840::nvmc::DRIVER_NUM,
+                subdriver_number: cmd,
+                arg0: ptr,
+                arg1: len,
+            } if (cmd == 2 || cmd == 3) && !process.fits_in_storage_location(ptr, len) => {
+                Err(kernel::ReturnCode::EINVAL)
+            }
+            _ => Ok(()),
         }
     }
 }
@@ -204,7 +247,10 @@ pub unsafe fn reset_handler() {
         UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD))
     };
 
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(
+        kernel::Kernel,
+        kernel::Kernel::new_with_storage(&PROCESSES, &STORAGE_LOCATIONS)
+    );
 
     let gpio = components::gpio::GpioComponent::new(
         board_kernel,
@@ -411,6 +457,29 @@ pub unsafe fn reset_handler() {
         nrf52840::acomp::Comparator
     ));
 
+    let nvmc = static_init!(
+        nrf52840::nvmc::SyscallDriver,
+        nrf52840::nvmc::SyscallDriver::new(
+            &nrf52840::nvmc::NVMC,
+            board_kernel.create_grant(&memory_allocation_capability),
+        )
+    );
+
+    // Enable power events to be sent to USB controller
+    nrf52840::power::POWER.set_usb_client(&nrf52840::usbd::USBD);
+    nrf52840::power::POWER.enable_interrupts();
+
+    // Configure USB controller
+    let usb = components::usb_ctap::UsbCtapComponent::new(
+        board_kernel,
+        &nrf52840::usbd::USBD,
+        capsules::usb::usbc_client::MAX_CTRL_PACKET_SIZE_NRF52840,
+        VENDOR_ID,
+        PRODUCT_ID,
+        STRINGS,
+    )
+    .finalize(components::usb_ctap_component_buf!(nrf52840::usbd::Usbd));
+
     nrf52_components::NrfClockComponent::new().finalize(());
 
     let platform = Platform {
@@ -426,6 +495,8 @@ pub unsafe fn reset_handler() {
         alarm,
         analog_comparator,
         nonvolatile_storage,
+        nvmc,
+        usb,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
     };
 
