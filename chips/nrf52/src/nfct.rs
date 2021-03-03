@@ -524,7 +524,7 @@ impl<'a> NfcTag<'a> {
     pub fn handle_interrupt(&self) {
         let mut current_field = NfcFieldState::None;
         let saved_inter = self.registers.intenset.extract();
-        self.disable_all_interrupts();
+        self.disable_all_interrupts_helper();
 
         let active_events = self.active_events();
         let events_to_process = saved_inter.bitand(active_events.get());
@@ -552,7 +552,7 @@ impl<'a> NfcTag<'a> {
         }
         // Ensure there are no spurious errors.
         self.clear_errors();
-        self.enable_interrupts();
+        self.enable_interrupts_helper();
     }
 
     fn active_events(&self) -> InMemoryRegister<u32, Interrupt::Register> {
@@ -615,17 +615,6 @@ impl<'a> NfcTag<'a> {
         result
     }
 
-    fn disable_all_interrupts(&self) {
-        self.registers.intenclr.set(0xffffffff);
-    }
-
-    /// Enable the main event interrupts
-    fn enable_interrupts(&self) {
-        self.registers.intenset.write(
-            Interrupt::SELECTED::SET + Interrupt::FIELDLOST::SET + Interrupt::FIELDDETECTED::SET,
-        );
-    }
-
     fn configure(&self) {
         self.clear_errors();
         self.registers
@@ -645,17 +634,17 @@ impl<'a> NfcTag<'a> {
         self.registers.framedelay_max.set(0x1000);
         // TODO: Remove TASKS_ACTIVATE and Enable TASKS_SENSE instead.
         self.registers.task_activate.write(Task::ENABLE::Trigger);
-        self.enable_interrupts();
+        self.enable_interrupts_helper();
         self.state.set(NfcState::Initialized);
     }
 
     fn disable(&self) {
         self.state.set(NfcState::Disabled);
-        self.disable_all_interrupts();
+        self.disable_all_interrupts_helper();
         self.registers.task_disable.write(Task::ENABLE::Trigger);
     }
 
-    pub fn set_dma_registers(&self, buffer: &[u8]) {
+    fn set_dma_registers(&self, buffer: &[u8]) {
         let len: u32 = buffer.len() as u32;
         self.registers.packetptr.set(buffer.as_ptr() as u32);
         self.registers.maxlen.write(MaxLen::LEN.val(len));
@@ -665,9 +654,29 @@ impl<'a> NfcTag<'a> {
                 .write(Amount::DATABYTES.val(len) + Amount::DATABITS::CLEAR);
         }
     }
+
+    fn disable_all_interrupts_helper(&self) {
+        self.registers.intenclr.set(0xffffffff);
+    }
+
+    fn enable_interrupts_helper(&self) {
+        self.registers.intenset.write(
+            Interrupt::SELECTED::SET + Interrupt::FIELDLOST::SET + Interrupt::FIELDDETECTED::SET,
+        );
+    }
 }
 
 impl<'a> hil::nfc::NfcTag<'a> for NfcTag<'a> {
+    fn disable_all_interrupts(&self) {
+        self.registers.intenclr.set(0xffffffff);
+    }
+
+    fn enable_interrupts(&self) {
+        self.registers.intenset.write(
+            Interrupt::SELECTED::SET + Interrupt::FIELDLOST::SET + Interrupt::FIELDDETECTED::SET,
+        );
+    }
+
     fn set_client(&self, client: &'a dyn hil::nfc::Client<'a>) {
         self.client.set(client);
     }
