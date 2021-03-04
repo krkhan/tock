@@ -157,12 +157,13 @@ impl<'a> NfcType4Driver<'a> {
             return copy_slice(&[0xf2, 0xfb][..], reply);
         }
 
-        if request[0] == 0xB3 {
-            debug!("XX> [C] NEGATIVE ACK RECEIVED, TROUBLE AHEAD");
-            return copy_slice(&[0xf2, 0xfb][..], reply);
-        }
-
-        if request[0] == 0xA2 || request[0] == 0xB2 || request[0] == 0xC2 || request[0] == 0xD2 {
+        if request[0] == 0xA2
+            || request[0] == 0xA3
+            || request[0] == 0xB2
+            || request[0] == 0xB3
+            || request[0] == 0xC2
+            || request[0] == 0xD2
+        {
             debug!("XX> [C] GOOD THINGS ARE HAPPENING, CONTINUING");
             return copy_slice(&[0xf2, 0xfb][..], reply);
         }
@@ -338,7 +339,7 @@ impl<'a> NfcType4Driver<'a> {
     ) -> ReturnCode {
         if self.app_tx_in_progress.is_none() {
             self.app_tx_in_progress.set(app_id);
-            self.app_tx_buffer
+            self.tx_buffer
                 .take()
                 .map(|buffer| self.transmit_internal(buffer, slice, len))
                 .unwrap()
@@ -390,7 +391,7 @@ impl<'a> NfcType4Driver<'a> {
             panic!("Trying to receive while transmit is in progress");
         }
         if app.rx_buffer.is_some() {
-            self.app_rx_buffer
+            self.rx_buffer
                 .take()
                 .map(|buffer| {
                     self.app_rx_in_progress.set(app_id);
@@ -511,15 +512,10 @@ impl<'a> NfcType4Driver<'a> {
             &buffer[..rx_len]
         );
 
-        if self.rx_buffer.is_none() {
-            debug!("==> [C][R2] SELF RX_BUFFER IS EMPTY, REPLACING");
-            self.rx_buffer.replace(buffer);
-        } else {
-            debug!("==> [C][R3] APP RX_BUFFER IS EMPTY, REPLACING");
-            self.app_rx_buffer.replace(buffer);
-        }
+        debug!("==> [C][R2] REPLACING SELF RX_BUFFER");
+        self.rx_buffer.replace(buffer);
 
-        debug!("==> [C][R4] CLEARING SELF RX_IN_PROGRESS");
+        debug!("==> [C][R3] CLEARING SELF RX_IN_PROGRESS");
         self.rx_in_progress.clear();
 
         let mut reply: [u8; MAX_LENGTH] = [0; MAX_LENGTH];
@@ -529,6 +525,7 @@ impl<'a> NfcType4Driver<'a> {
             for i in 0..rx_len - 1 {
                 bufcopy[i] = bufcopy[i + 1];
             }
+            debug!("==> [C][R4] BUBBLING UP FRAME");
             self.bubble_received_frame(&bufcopy[..], rx_len, result);
         }
 
@@ -557,18 +554,13 @@ impl<'a> NfcType4Driver<'a> {
             );
         }
 
-        if self.app_tx_buffer.is_none() {
-            debug!("--> [C][T2] APP TX_BUFFER IS EMPTY, REPLACING");
-            self.app_tx_buffer.replace(buffer);
-        } else {
-            debug!("--> [C][T3] SELF TX_BUFFER IS EMPTY, REPLACING");
-            self.tx_buffer.replace(buffer);
-        }
+        debug!("--> [C][T2] REPLACING SELF TX_BUFFER");
+        self.tx_buffer.replace(buffer);
 
-        debug!("--> [C][T4] CLEARING SELF TX_IN_PROGRESS");
+        debug!("--> [C][T3] CLEARING SELF TX_IN_PROGRESS");
         self.tx_in_progress.clear();
 
-        if bufcopy[0] == 0x03 || bufcopy[0] == 0x13 || bufcopy[0] == 0x02 || bufcopy[0] == 0x12 {
+        if self.app_tx_in_progress.is_some() {
             self.bubble_transmitted_frame(&bufcopy[..], result);
         }
 
@@ -606,11 +598,7 @@ impl<'a> NfcType4Driver<'a> {
         }
 
         if rx_buffer.is_some() {
-            if self.rx_buffer.is_none() {
-                self.rx_buffer.replace(rx_buffer.unwrap());
-            } else {
-                self.app_rx_buffer.replace(rx_buffer.unwrap());
-            }
+            self.rx_buffer.replace(rx_buffer.unwrap());
         }
         if self.rx_in_progress.is_some() {
             self.rx_in_progress.clear();
@@ -625,11 +613,7 @@ impl<'a> NfcType4Driver<'a> {
         }
 
         if tx_buffer.is_some() {
-            if self.tx_buffer.is_none() {
-                self.tx_buffer.replace(tx_buffer.unwrap());
-            } else {
-                self.app_tx_buffer.replace(tx_buffer.unwrap());
-            }
+            self.tx_buffer.replace(tx_buffer.unwrap());
         }
         if self.tx_in_progress.is_some() {
             self.tx_in_progress.clear();
