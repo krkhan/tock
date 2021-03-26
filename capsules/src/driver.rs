@@ -34,6 +34,7 @@ pub enum NUM {
     Ieee802154            = 0x30001,
     Udp                   = 0x30002,
     NFC                   = 0x30003,
+    NFCType4              = 0x30004,
 
     // Cryptography
     Rng                   = 0x40001,

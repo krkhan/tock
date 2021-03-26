@@ -20,7 +20,7 @@ pub struct App {
 pub const MAX_LENGTH: usize = 256;
 
 pub struct NfcDriver<'a> {
-    driver: &'a dyn nfc::NfcTag<'a>,
+    pub driver: &'a dyn nfc::NfcTag<'a>,
     application: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,

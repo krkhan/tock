@@ -1,7 +1,7 @@
 #![no_std]
 
 pub use nrf52::{
-    acomp, adc, aes, ble_radio, clock, constants, crt1, ficr, i2c, ieee802154_radio, init, nfct,
+    acomp, adc, aes, ble_radio, clock, constants, crt1, ficr, i2c, ieee802154_radio, init, nfct, nfct_type4,
     nvmc, pinmux, power, ppi, pwm, rtc, spi, temperature, timer, trng, uart, uicr, usbd,
 };
 pub mod chip;
