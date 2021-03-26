@@ -174,6 +174,7 @@ pub struct Platform {
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
     >,
     nonvolatile_storage: &'static capsules::nonvolatile_storage_driver::NonvolatileStorage<'static>,
+    nfc: &'static capsules::nfc::NfcDriver<'static>,
     nvmc: &'static nrf52840::nvmc::SyscallDriver,
     usb: &'static capsules::usb::usb_ctap::CtapUsbSyscallDriver<
         'static,
@@ -200,6 +201,7 @@ impl kernel::Platform for Platform {
             capsules::temperature::DRIVER_NUM => f(Some(self.temp)),
             capsules::analog_comparator::DRIVER_NUM => f(Some(self.analog_comparator)),
             capsules::nonvolatile_storage_driver::DRIVER_NUM => f(Some(self.nonvolatile_storage)),
+            capsules::nfc::DRIVER_NUM => f(Some(self.nfc)),
             nrf52840::nvmc::DRIVER_NUM => f(Some(self.nvmc)),
             capsules::usb::usb_ctap::DRIVER_NUM => f(Some(self.usb)),
             capsules::firmware_protection::DRIVER_NUM => f(Some(self.crp)),
@@ -386,6 +388,9 @@ pub unsafe fn reset_handler() {
         nrf52_components::BLEComponent::new(board_kernel, &nrf52840::ble_radio::RADIO, mux_alarm)
             .finalize(());
 
+    let nfc_driver =
+        components::nfc::NfcComponent::new(board_kernel, &nrf52840::nfct::NFCT).finalize(());
+
     let (ieee802154_radio, _mux_mac) = components::ieee802154::Ieee802154Component::new(
         board_kernel,
         &nrf52840::ieee802154_radio::RADIO,
@@ -507,6 +512,7 @@ pub unsafe fn reset_handler() {
         nonvolatile_storage,
         nvmc,
         usb,
+        nfc: nfc_driver,
         crp,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
     };
