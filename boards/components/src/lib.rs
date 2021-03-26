@@ -9,6 +9,7 @@ pub mod console;
 pub mod crc;
 pub mod debug_queue;
 pub mod debug_writer;
+pub mod firmware_protection;
 pub mod ft6x06;
 pub mod gpio;
 pub mod hd44780;

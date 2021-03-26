@@ -1,13 +1,14 @@
 //! User information configuration registers
 
-
 use enum_primitive::cast::FromPrimitive;
+use hil::firmware_protection::ProtectionLevel;
 use kernel::common::registers::{register_bitfields, register_structs, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
 
 use crate::gpio::Pin;
+use crate::nvmc::NVMC;
 
 const UICR_BASE: StaticRef<UicrRegisters> =
     unsafe { StaticRef::new(0x10001000 as *const UicrRegisters) };
@@ -208,5 +209,51 @@ impl Uicr {
 
     pub fn set_ap_protect(&self) {
         self.registers.approtect.write(ApProtect::PALL::ENABLED);
+    }
+}
+
+impl hil::firmware_protection::FirmwareProtection for Uicr {
+    fn get_protection(&self) -> ProtectionLevel {
+        let ap_protect_state = self.is_ap_protect_enabled();
+        let cpu_debug_state = self
+            .registers
+            .debugctrl
+            .matches_all(DebugControl::CPUNIDEN::ENABLED + DebugControl::CPUFPBEN::ENABLED);
+        match (ap_protect_state, cpu_debug_state) {
+            (false, _) => ProtectionLevel::NoProtection,
+            (true, true) => ProtectionLevel::JtagDisabled,
+            (true, false) => ProtectionLevel::FullyLocked,
+        }
+    }
+
+    fn set_protection(&self, level: ProtectionLevel) -> ReturnCode {
+        let current_level = self.get_protection();
+        if current_level > level || level == ProtectionLevel::Unknown {
+            return ReturnCode::EINVAL;
+        }
+        if current_level == level {
+            return ReturnCode::EALREADY;
+        }
+
+        unsafe { NVMC.configure_writeable() };
+        if level >= ProtectionLevel::JtagDisabled {
+            self.set_ap_protect();
+        }
+
+        if level >= ProtectionLevel::FullyLocked {
+            // Prevent CPU debug and flash patching. Leaving these enabled could
+            // allow to circumvent protection.
+            self.registers
+                .debugctrl
+                .write(DebugControl::CPUNIDEN::DISABLED + DebugControl::CPUFPBEN::DISABLED);
+            // TODO(jmichel): prevent returning into bootloader if present
+        }
+        unsafe { NVMC.configure_readonly() };
+
+        if self.get_protection() == level {
+            ReturnCode::SUCCESS
+        } else {
+            ReturnCode::FAIL
+        }
     }
 }

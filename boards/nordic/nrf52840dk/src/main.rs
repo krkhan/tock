@@ -180,6 +180,7 @@ pub struct Platform {
         'static,
         nrf52840::usbd::Usbd<'static>,
     >,
+    crp: &'static capsules::firmware_protection::FirmwareProtection<nrf52840::uicr::Uicr>,
 }
 
 impl kernel::Platform for Platform {
@@ -201,6 +202,7 @@ impl kernel::Platform for Platform {
             capsules::nonvolatile_storage_driver::DRIVER_NUM => f(Some(self.nonvolatile_storage)),
             nrf52840::nvmc::DRIVER_NUM => f(Some(self.nvmc)),
             capsules::usb::usb_ctap::DRIVER_NUM => f(Some(self.usb)),
+            capsules::firmware_protection::DRIVER_NUM => f(Some(self.crp)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
@@ -480,6 +482,14 @@ pub unsafe fn reset_handler() {
     )
     .finalize(components::usb_ctap_component_buf!(nrf52840::usbd::Usbd));
 
+    let crp = components::firmware_protection::FirmwareProtectionComponent::new(
+        board_kernel,
+        nrf52840::uicr::Uicr::new(),
+    )
+    .finalize(components::firmware_protection_component_helper!(
+        nrf52840::uicr::Uicr
+    ));
+
     nrf52_components::NrfClockComponent::new().finalize(());
 
     let platform = Platform {
@@ -497,6 +507,7 @@ pub unsafe fn reset_handler() {
         nonvolatile_storage,
         nvmc,
         usb,
+        crp,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
     };
 

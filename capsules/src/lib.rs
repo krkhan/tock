@@ -22,6 +22,7 @@ pub mod crc;
 pub mod dac;
 pub mod debug_process_restart;
 pub mod driver;
+pub mod firmware_protection;
 pub mod fm25cl;
 pub mod ft6x06;
 pub mod fxos8700cq;
