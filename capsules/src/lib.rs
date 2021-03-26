@@ -47,6 +47,7 @@ pub mod mcp230xx;
 pub mod mlx90614;
 pub mod mx25r6435f;
 pub mod nfc;
+pub mod nfc_type4;
 pub mod ninedof;
 pub mod nonvolatile_storage_driver;
 pub mod nonvolatile_to_pages;

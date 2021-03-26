@@ -16,6 +16,7 @@ pub mod i2c;
 pub mod led;
 pub mod log;
 pub mod nfc;
+pub mod nfc_type4;
 pub mod nonvolatile_storage;
 pub mod pwm;
 pub mod radio;
