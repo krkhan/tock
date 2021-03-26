@@ -45,6 +45,17 @@ const PAN_ID: u16 = 0xABCD;
 /// UART Writer
 pub mod io;
 
+const VENDOR_ID: u16 = 0x1915; // Nordic Semiconductor
+const PRODUCT_ID: u16 = 0x521f; // nRF52840 Dongle (PCA10059)
+static STRINGS: &'static [&'static str] = &[
+    // Manufacturer
+    "Nordic Semiconductor ASA",
+    // Product
+    "OpenSK",
+    // Serial number
+    "v1.0",
+];
+
 // State for loading and holding applications.
 // How should the kernel respond when a process faults.
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
@@ -96,6 +107,11 @@ pub struct Platform {
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
     >,
     nvmc: &'static nrf52840::nvmc::SyscallDriver,
+    usb: &'static capsules::usb::usb_ctap::CtapUsbSyscallDriver<
+        'static,
+        'static,
+        nrf52840::usbd::Usbd<'static>,
+    >,
 }
 
 impl kernel::Platform for Platform {
@@ -115,6 +131,7 @@ impl kernel::Platform for Platform {
             capsules::temperature::DRIVER_NUM => f(Some(self.temp)),
             capsules::analog_comparator::DRIVER_NUM => f(Some(self.analog_comparator)),
             nrf52840::nvmc::DRIVER_NUM => f(Some(self.nvmc)),
+            capsules::usb::usb_ctap::DRIVER_NUM => f(Some(self.usb)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
@@ -323,6 +340,21 @@ pub unsafe fn reset_handler() {
         )
     );
 
+    // Enable power events to be sent to USB controller
+    nrf52840::power::POWER.set_usb_client(&nrf52840::usbd::USBD);
+    nrf52840::power::POWER.enable_interrupts();
+
+    // Configure USB controller
+    let usb = components::usb_ctap::UsbCtapComponent::new(
+        board_kernel,
+        &nrf52840::usbd::USBD,
+        capsules::usb::usbc_client::MAX_CTRL_PACKET_SIZE_NRF52840,
+        VENDOR_ID,
+        PRODUCT_ID,
+        STRINGS,
+    )
+    .finalize(components::usb_ctap_component_buf!(nrf52840::usbd::Usbd));
+
     nrf52_components::NrfClockComponent::new().finalize(());
 
     let platform = Platform {
@@ -338,6 +370,7 @@ pub unsafe fn reset_handler() {
         alarm,
         analog_comparator,
         nvmc,
+        usb,
         ipc: kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability),
     };
 
