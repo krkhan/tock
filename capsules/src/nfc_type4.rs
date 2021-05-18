@@ -104,6 +104,7 @@ impl<'a> NfcType4Driver<'a> {
 
     fn generate_type4_reply(&self, request: &[u8], reply: &mut [u8]) -> usize {
         //
+        //                                     Spec: ISO 14443-4
         //                   The code below caters exclusively to the following scenario
         //
         //                              [ OpenSK running on nrf52840dk ]
@@ -133,6 +134,7 @@ impl<'a> NfcType4Driver<'a> {
         //          | I-Block(1); Chaining(Off) -------------------------------------------> |
         //          | [03 00 (APDU ...) ] -------------------------------------------------> |
         //          |                                                                        |
+        //          | R-Block(1); NACK ----------------------------------------------------> |
         //          | <------------------------------------------------------- S-Block (WTX) |
         //          | <------------------------------------------------------------- [f2 fb] |
         //          |                                                                        |
