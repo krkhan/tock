@@ -192,7 +192,7 @@ impl<'a> NfcType4Driver<'a> {
         //
         // * Respond to RATS with ATS
         // * Respond to [SELECT "U2F_V2"] with ["U2F_V2" OK]
-        // * Bubble received APDUs to the app (including the prefix and checksum)
+        // * Bubble received APDUs to the app (after *removing* prefix and checksum)
         // * Respond to any NACK from reader with a S(WTX) request
         // * Generate appropriate prefix based on current block number and whether chaining is on
         // * Append 90 00 to last block in a chain
